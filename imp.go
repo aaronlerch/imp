@@ -8,6 +8,8 @@ import (
 	"time"
 	"image"
 	_ "image/jpeg"
+	_ "image/png"
+	_ "image/gif"
 )
 
 type Point struct {
@@ -24,12 +26,14 @@ type Cluster struct {
 func main() {
 	rand.Seed(time.Now().Unix())
 
+	start := time.Now()
+
 	fname := "lenna.jpg"
 	if len(os.Args) > 1 {
 		fname = os.Args[1]
 	}
 
-	fmt.Println("Processing file", fname)
+	fmt.Println("Processing", fname)
 
 	f, err := os.Open(fname)
 	if err != nil {
@@ -44,24 +48,26 @@ func main() {
 		return
 	}
 
-	start := time.Now()
-	process(img)
 	duration := time.Now().Sub(start)
-	fmt.Println("Finished processing, duration", duration)
+	fmt.Println("Prepped for processing in", duration)
+
+	start = time.Now()
+	process(img)
+	duration = time.Now().Sub(start)
+	fmt.Println("Processed in", duration)
 }
 
 func random(min, max int) int {
     return rand.Intn(max - min) + min
 }
 
-func euclidean(p1, p2 Point) float64 {
-	s := 0.0
+func euclidean(p1, p2 *Point) float64 {
+	s := 0
 	for i := 0; i < p1.n; i++ {
 		diff := int(p1.coords[i]) - int(p2.coords[i])
-		pow2 := math.Pow(float64(diff), 2)
-		s += pow2
+		s += diff * diff // tons more efficient to do x*x instead of math.Pow(x,2)
 	}
-	return math.Sqrt(s)
+	return math.Sqrt(float64(s))
 }
 
 func calculate_center(points []Point, n int) Point {
@@ -124,27 +130,29 @@ func process(i image.Image) {
 	// Loop until each cluster's center isn't moving more than the acceptable distance
 	iteration := 0
 	for {
-		//fmt.Println("Processing iteration", iteration)
 		iteration += 1
 		plists := make([][]Point, k)
 		for i := 0; i < k; i++ {
-			plists[i] = make([]Point, 0)
+			plists[i] = make([]Point, 0, len(points)) // err on the side of too-large a list
 		}
 
+		//start := time.Now()
 		for _, p := range points {
 			smallest_distance := math.MaxFloat64
 			idx := 0
 			for i := 0; i < k; i++ {
-				distance := euclidean(p, clusters[i].center)
+				distance := euclidean(&p, &clusters[i].center)
 				if distance < smallest_distance {
 					smallest_distance = distance
 					idx = i
 				}
 			}
 
-			//fmt.Printf("Point %v assigned to cluster %d\n", p, idx)
 			plists[idx] = append(plists[idx], p)
 		}
+
+		//duration := time.Now().Sub(start)
+		//fmt.Printf("Iteration %d: grouped points in clusters in %v\n", iteration, duration)
 
 		diff := 0.0
 		for i := 0; i < k; i++ {
@@ -155,7 +163,7 @@ func process(i image.Image) {
 			new_cluster := Cluster{plists[i], center, old_cluster.n}
 			clusters[i] = new_cluster
 			//fmt.Printf("New cluster %d has %d points with center at %v\n", i, len(clusters[i].points), clusters[i].center)
-			cluster_center_diff := euclidean(old_cluster.center, new_cluster.center)
+			cluster_center_diff := euclidean(&old_cluster.center, &new_cluster.center)
 			//fmt.Printf("Cluster %d's center has moved %v\n", i, cluster_center_diff)
 			diff = math.Max(diff, cluster_center_diff)
 		}
@@ -164,9 +172,12 @@ func process(i image.Image) {
 		if diff < min_diff {
 			break
 		}
+
+		//duration = time.Now().Sub(iter_start)
+		//fmt.Printf("Iteration %d took %v\n", iteration, duration)
 	}
 
-	fmt.Printf("Completed in %d turns\n\n", iteration)
+	fmt.Printf("Completed in %d turns\n", iteration)
 	for i := 0; i < k; i++ {
 		c := clusters[i].center
 		fmt.Printf("Color %d: %X%X%X\n", i, c.coords[0], c.coords[1], c.coords[2])
