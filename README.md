@@ -1,5 +1,5 @@
-image-processor
-===============
+imp
+===
 
 A simple image processor written in Go, as a learning exercise. None of this code should be treated as reference material.
 
